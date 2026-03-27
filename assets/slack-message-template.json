@@ -1,0 +1,90 @@
+{
+  "blocked": {
+    "blocks": [
+      {
+        "type": "header",
+        "text": {
+          "type": "plain_text",
+          "text": "❌ Skill Audit BLOCKED — \"{{skill_name}}\"",
+          "emoji": true
+        }
+      },
+      {
+        "type": "section",
+        "fields": [
+          {
+            "type": "mrkdwn",
+            "text": "*제출자:* {{submitted_by}}"
+          },
+          {
+            "type": "mrkdwn",
+            "text": "*PR:* #{{pr_number}}"
+          }
+        ]
+      },
+      {
+        "type": "divider"
+      },
+      {
+        "type": "section",
+        "text": {
+          "type": "mrkdwn",
+          "text": "*CRITICAL ({{critical_count}}):*\n{{critical_list}}"
+        }
+      },
+      {
+        "type": "section",
+        "text": {
+          "type": "mrkdwn",
+          "text": "*HIGH ({{high_count}}) — 참고:*\n{{high_list}}"
+        }
+      },
+      {
+        "type": "divider"
+      },
+      {
+        "type": "section",
+        "text": {
+          "type": "mrkdwn",
+          "text": "→ {{pr_url}}"
+        }
+      }
+    ]
+  },
+  "expiry_warning": {
+    "blocks": [
+      {
+        "type": "header",
+        "text": {
+          "type": "plain_text",
+          "text": "⏰ audit-ignore 만료 예정 — \"{{skill_name}}\"",
+          "emoji": true
+        }
+      },
+      {
+        "type": "section",
+        "fields": [
+          {
+            "type": "mrkdwn",
+            "text": "*규칙:* {{rule_id}}"
+          },
+          {
+            "type": "mrkdwn",
+            "text": "*만료:* {{expires}} (D-{{days_remaining}})"
+          },
+          {
+            "type": "mrkdwn",
+            "text": "*승인자:* {{reviewer}}"
+          }
+        ]
+      },
+      {
+        "type": "section",
+        "text": {
+          "type": "mrkdwn",
+          "text": "갱신하지 않으면 해당 규칙이 재활성화됩니다.\n→ {{pr_url}}"
+        }
+      }
+    ]
+  }
+}

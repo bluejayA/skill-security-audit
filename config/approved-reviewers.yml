@@ -1,0 +1,7 @@
+# audit-ignore 승인자 목록
+# SKILL.md frontmatter의 audit-ignore.reviewer 값이 이 목록에 있어야 예외가 유효하다.
+# 마켓플레이스 관리자만 추가한다.
+
+approved_reviewers:
+  - "@admin"
+  - "@marketplace-maintainer"

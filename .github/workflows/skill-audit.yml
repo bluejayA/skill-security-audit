@@ -1,0 +1,236 @@
+name: Skill Security Audit
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'skills/**'
+  workflow_dispatch:
+    inputs:
+      skill_path:
+        description: '검사할 스킬 디렉토리 경로'
+        required: true
+
+permissions:
+  contents: read
+  pull-requests: write
+  checks: write
+
+jobs:
+  skill-audit:
+    runs-on: ubuntu-latest
+    steps:
+      # Step 1: Checkout
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Step 2: Detect changed skill directories
+      - name: Detect changed skills
+        id: detect
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "skills=${{ inputs.skill_path }}" >> "$GITHUB_OUTPUT"
+            echo "count=1" >> "$GITHUB_OUTPUT"
+          else
+            CHANGED_SKILLS=$(git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.sha }}" \
+              | grep '^skills/' \
+              | cut -d'/' -f1-2 \
+              | sort -u \
+              | tr '\n' ' ')
+            COUNT=$(echo "$CHANGED_SKILLS" | wc -w | tr -d ' ')
+            echo "skills=$CHANGED_SKILLS" >> "$GITHUB_OUTPUT"
+            echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Skip if no skills changed
+        if: steps.detect.outputs.count == '0'
+        run: echo "No skill directories changed. Skipping audit."
+
+      # Step 3: Run skill-security-audit per skill
+      - name: Install Claude CLI
+        if: steps.detect.outputs.count != '0'
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Run audit per skill
+        if: steps.detect.outputs.count != '0'
+        id: audit
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          OVERALL_VERDICT="PASSED"
+          REPORT=""
+          JSON_RESULTS="[]"
+
+          for SKILL_DIR in ${{ steps.detect.outputs.skills }}; do
+            echo "::group::Auditing $SKILL_DIR"
+
+            SKILL_NAME=$(basename "$SKILL_DIR")
+            RULESET_VERSION=$(cat skills/skill-security-audit/ruleset-version.txt 2>/dev/null || echo "unknown")
+            RULESET_SHA=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+
+            # Run the audit skill
+            RESULT=$(claude --print \
+              "skills/skill-security-audit 스킬을 사용하여 ${SKILL_DIR} 스킬을 검사해줘. PR 제출자: ${{ github.actor }}, Ruleset version: ${RULESET_VERSION}, Ruleset SHA: ${RULESET_SHA}. JSON 결과도 함께 출력해줘." \
+              2>&1) || true
+
+            # Extract verdict from result
+            if echo "$RESULT" | grep -q "BLOCKED"; then
+              SKILL_VERDICT="BLOCKED"
+              OVERALL_VERDICT="BLOCKED"
+            elif echo "$RESULT" | grep -q "PASSED with warnings"; then
+              SKILL_VERDICT="PASSED_WITH_WARNINGS"
+              if [ "$OVERALL_VERDICT" != "BLOCKED" ]; then
+                OVERALL_VERDICT="PASSED_WITH_WARNINGS"
+              fi
+            else
+              SKILL_VERDICT="PASSED"
+            fi
+
+            REPORT="${REPORT}
+          ${RESULT}
+          "
+            echo "::endgroup::"
+          done
+
+          # Save report for PR comment
+          echo "$REPORT" > /tmp/audit-report.md
+          echo "verdict=$OVERALL_VERDICT" >> "$GITHUB_OUTPUT"
+
+      # Step 4: Update PR comment
+      - name: Update PR comment
+        if: github.event_name == 'pull_request' && steps.detect.outputs.count != '0'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync('/tmp/audit-report.md', 'utf8');
+            const marker = '<!-- skill-audit-report -->';
+            const body = `${marker}\n## Skill Audit Results\n\n${report}`;
+
+            // Find existing bot comment
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const existing = comments.find(c => c.body.includes(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+
+      # Step 5: Set Check Run per skill
+      - name: Set check run status
+        if: steps.detect.outputs.count != '0'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const verdict = '${{ steps.audit.outputs.verdict }}';
+            const conclusion = verdict === 'BLOCKED' ? 'failure' : 'success';
+            const title = verdict === 'BLOCKED'
+              ? '❌ BLOCKED — CRITICAL findings detected'
+              : verdict === 'PASSED_WITH_WARNINGS'
+                ? '⚠️ PASSED with warnings'
+                : '✅ PASSED';
+
+            await github.rest.checks.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              name: 'Skill Security Audit',
+              head_sha: context.sha,
+              status: 'completed',
+              conclusion,
+              output: {
+                title,
+                summary: `Audit verdict: ${verdict}`,
+              },
+            });
+
+      # Step 6: Slack notification + D-30 expiry warning
+      - name: Send Slack notification
+        if: steps.audit.outputs.verdict == 'BLOCKED' && steps.detect.outputs.count != '0'
+        continue-on-error: true
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          if [ -z "$SLACK_WEBHOOK_URL" ]; then
+            echo "SLACK_WEBHOOK_URL not set. Skipping Slack notification."
+            exit 0
+          fi
+
+          PR_URL="${{ github.event.pull_request.html_url || 'N/A' }}"
+          PR_NUMBER="${{ github.event.pull_request.number || 'N/A' }}"
+          SUBMITTER="${{ github.actor }}"
+
+          curl -s -X POST "$SLACK_WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"blocks\": [
+                {
+                  \"type\": \"header\",
+                  \"text\": {
+                    \"type\": \"plain_text\",
+                    \"text\": \"❌ Skill Audit BLOCKED\",
+                    \"emoji\": true
+                  }
+                },
+                {
+                  \"type\": \"section\",
+                  \"fields\": [
+                    {\"type\": \"mrkdwn\", \"text\": \"*제출자:* ${SUBMITTER}\"},
+                    {\"type\": \"mrkdwn\", \"text\": \"*PR:* #${PR_NUMBER}\"}
+                  ]
+                },
+                {
+                  \"type\": \"section\",
+                  \"text\": {
+                    \"type\": \"mrkdwn\",
+                    \"text\": \"CRITICAL findings가 감지되었습니다. PR comment에서 상세 내역을 확인하세요.\n→ ${PR_URL}\"
+                  }
+                }
+              ]
+            }"
+
+      # Self-Audit test
+      - name: Self-Audit test
+        if: steps.detect.outputs.count != '0'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          echo "::group::Self-Audit: Testing skill-security-audit against itself"
+
+          RESULT=$(claude --print \
+            "skills/skill-security-audit 스킬을 사용하여 skills/skill-security-audit 자신을 검사해줘. Self-Audit 테스트이므로 FALSE POSITIVE가 0건이어야 한다." \
+            2>&1) || true
+
+          if echo "$RESULT" | grep -q "BLOCKED"; then
+            echo "::error::Self-Audit FAILED: skill-security-audit detected false positives on itself"
+            exit 1
+          fi
+
+          echo "Self-Audit PASSED: No false positives detected"
+          echo "::endgroup::"
+
+      # Save JSON artifact
+      - name: Upload audit result
+        if: steps.detect.outputs.count != '0'
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-result
+          path: /tmp/audit-report.md
+          retention-days: 30
