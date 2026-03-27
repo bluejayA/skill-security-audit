@@ -50,6 +50,7 @@ HIGH/MEDIUM만      → ⚠️ PASSED with warnings
 |------|------|
 | [Introduction](docs/introduction.md) | 프로젝트 배경, 설계 철학, 아키텍처 |
 | [User Guide](docs/user-guide.md) | 설치, 로컬 실행, CI 설정, audit-ignore, 트러블슈팅 |
+| [Integration Guide](docs/integration-guide.md) | 기존 마켓플레이스 저장소에 통합하는 방법 |
 | [Phase 1 Spec](docs/phase1-spec.md) | Phase 1 상세 스펙 (규칙 정의, 판정 로직) |
 | [General Spec](docs/general-spec.md) | Phase 1+2 통합 스펙 (참조용) |
 
