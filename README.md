@@ -58,17 +58,21 @@ HIGH/MEDIUM만      → ⚠️ PASSED with warnings
 
 ```
 skill-security-audit/
-├── SKILL.md                          # 메인 스킬 (검사 워크플로우)
-├── ruleset-version.txt               # 룰셋 버전 고정 (1.0.0)
-├── references/
-│   ├── security-checklist.md         # SEC-*, SBX-* 규칙
-│   ├── destructive-ops-checklist.md  # DST-* 규칙
-│   └── quality-checklist.md          # QUA-* 규칙
-├── assets/
-│   ├── report-template.md            # Markdown 보고서 템플릿
-│   └── slack-message-template.json   # Slack Block Kit 템플릿
-├── config/
-│   └── approved-reviewers.yml        # audit-ignore 승인자 목록
+├── .claude-plugin/
+│   └── plugin.json             # 플러그인 메타데이터
+├── skills/
+│   └── skill-security-audit/
+│       ├── SKILL.md                    # 메인 스킬 (검사 워크플로우)
+│       ├── ruleset-version.txt         # 룰셋 버전 고정
+│       ├── references/
+│       │   ├── security-checklist.md   # SEC-*, SBX-* 규칙
+│       │   ├── destructive-ops-checklist.md  # DST-* 규칙
+│       │   └── quality-checklist.md    # QUA-* 규칙
+│       ├── assets/
+│       │   ├── report-template.md      # Markdown 보고서 템플릿
+│       │   └── slack-message-template.json  # Slack Block Kit 템플릿
+│       └── config/
+│           └── approved-reviewers.yml  # audit-ignore 승인자 목록
 ├── .github/workflows/
 │   └── skill-audit.yml               # GitHub Actions 워크플로우
 └── docs/
