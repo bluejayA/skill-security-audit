@@ -4,7 +4,7 @@
 **Submitted by**: {{submitted_by}}
 **Audit date**: {{audit_date}}
 **Ruleset version**: v{{ruleset_version}} (sha: {{ruleset_sha}})
-**Phase**: 1
+**Phase**: {{phase}}
 **Verdict**: {{verdict_emoji}} {{verdict}}
 
 ## Summary
@@ -25,6 +25,7 @@
 #### [{{id}}] {{title}}
 - **File**: {{file}}:{{line}}
 - **Evidence**: `{{evidence}}`
+- **OWASP AST**: {{owasp_ast}}
 - **Fix**: {{fix}}
 
 {{/each}}
@@ -36,6 +37,7 @@
 {{#each high_findings}}
 #### [{{id}}] {{title}}
 - **File**: {{file}}:{{line}}
+- **OWASP AST**: {{owasp_ast}}
 - **Note**: {{fix}}
 
 {{/each}}
@@ -47,6 +49,7 @@
 {{#each medium_findings}}
 #### [{{id}}] {{title}}
 - **File**: {{file}}:{{line}}
+- **OWASP AST**: {{owasp_ast}}
 - **Note**: {{fix}}
 
 {{/each}}
@@ -65,4 +68,4 @@
 
 ---
 
-*Ruleset v{{ruleset_version}} · Phase 1 · {{slack_status}}*
+*Ruleset v{{ruleset_version}} · Phase {{phase}} · {{slack_status}}*
