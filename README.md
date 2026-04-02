@@ -1,121 +1,146 @@
 # skill-security-audit
 
-Claude Code 마켓플레이스에 제출된 서드파티 스킬을 **보안, 안전성, 품질** 기준으로 자동 검사하는 게이트키퍼 스킬.
+Automated security gatekeeper for Claude Code skills — scans third-party skills for credential leaks, destructive operations, metadata manipulation, and quality issues before marketplace registration.
 
-> **Phase 2** — OWASP Agentic Skills Top 10 (AST10) 기반 35개 규칙. "즉각적 실질 피해 차단 + 메타데이터 무결성 + 사양 준수"
+> **v2.0** — 35 rules based on OWASP Agentic Skills Top 10 (AST10). Blocks only immediate, real-world threats while keeping the barrier low for good skills.
+
+## Principles
+
+| Principle | Description |
+|-----------|-------------|
+| **Adoption-First** | Only CRITICAL findings block. HIGH/MEDIUM are warnings |
+| **Deterministic-First** | LLM only classifies Markdown context. All verdicts are rule-based |
+| **Actionable Feedback** | Every blocking finding includes rule ID, file:line, evidence, and fix suggestion |
+
+## Verdict Logic
+
+```
+1+ CRITICAL finding  → ❌ BLOCKED    (PR check failure)
+HIGH/MEDIUM only     → ⚠️ PASSED with warnings
+No findings          → ✅ PASSED
+```
 
 ## Quick Start
 
+### Local Verification
+
+Audit your skill before submitting to the marketplace:
+
 ```bash
-# 로컬에서 스킬 검사
-claude "제출 전에 스킬을 검사해줘: /path/to/my-skill"
+# Install the plugin
+claude plugins install https://github.com/bluejayA/skill-security-audit.git
+
+# Run audit on your skill directory
+claude "skill-security-audit 스킬로 /path/to/my-skill 을 검사해줘"
 ```
 
-GitHub Actions에서는 `skills/**` 경로 변경 시 자동 트리거됩니다.
+### CI Integration
 
-## 핵심 원칙
+Add automated auditing to your plugin repository or marketplace. See the guides below for detailed setup.
 
-| 원칙 | 설명 |
-|------|------|
-| **Adoption-First** | CRITICAL만 차단. 좋은 스킬이 불필요하게 막히지 않는다 |
-| **Deterministic-First** | LLM은 Markdown 문맥 분류에만 사용. 최종 판정은 규칙 기반 |
-| **Actionable Feedback** | 차단 시 규칙 ID + 파일:라인 + 수정 예시 제공 |
+## Guides
 
-## 판정 기준
+| Guide | Description |
+|-------|-------------|
+| [Local Verification Guide](docs/local-verification-guide.md) | Run audits locally with Claude CLI before PR submission |
+| [CI Integration Guide](docs/ci-integration-guide.md) | Add GitHub Actions workflows for automated PR auditing |
+| [User Guide](docs/user-guide.md) | Installation, audit-ignore syntax, troubleshooting |
+| [Integration Guide](docs/integration-guide.md) | Integrate into existing marketplace repos (submodule setup) |
 
-```
-CRITICAL 1개 이상  → ❌ BLOCKED (PR failure)
-HIGH/MEDIUM만      → ⚠️ PASSED with warnings
-발견 없음          → ✅ PASSED
-```
+## Rules (35 total)
 
-## 규칙 (35개)
+### CRITICAL (17) — Blocks submission
 
-### CRITICAL (17개) — 1개라도 발견 시 차단
+| Category | Rules |
+|----------|-------|
+| Credentials | SEC-010 hardcoded API keys, SEC-011 private keys, SEC-013 env dump + exfil |
+| Remote exec | SEC-003 curl\|bash, SEC-030 base64\|bash |
+| Shell injection | SEC-001 untrusted input + shell exec |
+| Sensitive paths | SBX-003 path traversal, SBX-004 ~/.ssh etc, SBX-007 keychain/history |
+| Destructive | DST-001 rm -rf, DST-007 sudo/chmod 777 |
+| Quality | QUA-001 SKILL.md existence |
+| Metadata | META-001 identity file writes, META-002 zero-width unicode, META-003 base64 payloads |
+| Code safety | SEC-040 unsafe YAML loaders, SEC-041 dangerous code execution |
 
-| 카테고리 | 규칙 |
-|----------|------|
-| 자격증명 | SEC-010 하드코딩 API 키, SEC-011 프라이빗 키, SEC-013 env 전체 덤프 |
-| 원격 실행 | SEC-003 curl\|bash, SEC-030 base64\|bash |
-| 셸 인젝션 | SEC-001 untrusted input + 셸 실행 |
-| 민감 경로 | SBX-003 경로 탈출, SBX-004 ~/.ssh 등, SBX-007 키체인/히스토리 |
-| 파괴적 동작 | DST-001 rm -rf, DST-007 sudo/chmod 777 |
-| 품질 | QUA-001 SKILL.md 존재 |
-| 메타데이터 | META-001 아이덴티티 파일 쓰기, META-002 제로폭 유니코드, META-003 Base64 페이로드 |
-| YAML 안전성 | SEC-040 안전하지 않은 YAML 로더 |
-| 코드 실행 | SEC-041 스크립트 내 위험한 코드 실행 |
+### HIGH (10) — Warnings only
 
-### HIGH (10개) — 경고
+SEC-001(trusted), SEC-002 eval/exec, SEC-020H HTTP+sensitive, SEC-022 network tools, SBX-001 external writes, SBX-010 unrestricted shell, SBX-011 binary network, SBX-012 wildcard globs, DST-003 force push, QUA-002 required fields
 
-| 카테고리 | 규칙 |
-|----------|------|
-| 기존 | SEC-001(trusted), SEC-002 eval, SEC-020H HTTP+민감, SEC-022 네트워크 도구, SBX-001 외부 쓰기, DST-003 force push, QUA-002 필수 필드 |
-| v2 추가 | SBX-010 무제한 셸 접근, SBX-011 바이너리 네트워크 권한, SBX-012 광범위 파일 글로브 |
+### MEDIUM (8) — Informational
 
-### MEDIUM (8개) — 참고
+SEC-012 sensitive config refs, SEC-020 HTTP requests, DST-002 single delete, QUA-003~006 quality, QUA-010~011 ambiguous expressions, SCH-001~005 spec compliance
 
-| 카테고리 | 규칙 |
-|----------|------|
-| 기존 | SEC-012 민감 설정 참조, SEC-020 HTTP 요청, DST-002 단일 삭제, QUA-003~006 품질, QUA-010~011 모호 표현 |
-| v2 추가 | SCH-001 name 필드 위반, SCH-002 description 부적절, SCH-003 비표준 필드, SCH-004 크기 초과, SCH-005 디렉토리 구조 |
+Full rule definitions in `skills/skill-security-audit/references/`.
 
-상세는 `references/` 체크리스트 참조.
+### OWASP AST10 Mapping
 
-### OWASP AST10 매핑
+| OWASP | Item | Rules |
+|-------|------|-------|
+| AST01 1.4 | Malicious patterns | SEC-041 |
+| AST01 1.6 | Identity file protection | META-001 |
+| AST03 3.3 | Shell access restriction | SBX-010 |
+| AST03 3.4 | File path scoping | SBX-012 |
+| AST03 3.7 | Network domain allowlist | SBX-011 |
+| AST04 4.1 | Description accuracy | SCH-002 |
+| AST04 4.2 | Steganography/encoding detection | META-002, META-003 |
+| AST05 5.1 | Safe YAML loaders | SEC-040 |
+| AST05 5.3 | Allowed field list | SCH-003 |
+| AST10 10.6 | Universal skill format | SCH-001, SCH-005 |
 
-| OWASP | 항목 | 대응 규칙 |
-|-------|------|-----------|
-| AST01 1.4 | 악성 패턴 검사 | SEC-041 |
-| AST01 1.6 | 아이덴티티 파일 보호 | META-001 |
-| AST03 3.3 | 셸 접근 제한 | SBX-010 |
-| AST03 3.4 | 파일 경로 스코핑 | SBX-012 |
-| AST03 3.7 | 네트워크 도메인 허용목록 | SBX-011 |
-| AST04 4.1 | 설명 정확성 | SCH-002 |
-| AST04 4.2 | 스테가노그래피/인코딩 탐지 | META-002, META-003 |
-| AST05 5.1 | 안전한 YAML 로더 | SEC-040 |
-| AST05 5.3 | 허용 필드 목록 | SCH-003 |
-| AST10 10.6 | 유니버설 스킬 포맷 | SCH-001, SCH-005 |
-
-## 문서
-
-| 문서 | 내용 |
-|------|------|
-| [Introduction](docs/introduction.md) | 프로젝트 배경, 설계 철학, 아키텍처 |
-| [User Guide](docs/user-guide.md) | 설치, 로컬 실행, CI 설정, audit-ignore, 트러블슈팅 |
-| [Integration Guide](docs/integration-guide.md) | 기존 마켓플레이스 저장소에 통합하는 방법 |
-| [Phase 1 Spec](docs/phase1-spec.md) | Phase 1 상세 스펙 (규칙 정의, 판정 로직) |
-| [General Spec](docs/general-spec.md) | Phase 1+2 통합 스펙 (참조용) |
-
-## 프로젝트 구조
+## Project Structure
 
 ```
 skill-security-audit/
 ├── .claude-plugin/
-│   └── plugin.json             # 플러그인 메타데이터
+│   └── plugin.json
 ├── skills/
 │   └── skill-security-audit/
-│       ├── SKILL.md                    # 메인 스킬 (검사 워크플로우)
-│       ├── ruleset-version.txt         # 룰셋 버전 고정
-│       ├── references/
-│       │   ├── security-checklist.md   # SEC-*, SBX-* 규칙 (+ v2 OWASP 확장)
-│       │   ├── destructive-ops-checklist.md  # DST-* 규칙
-│       │   ├── quality-checklist.md    # QUA-* 규칙
-│       │   ├── metadata-checklist.md   # META-* 규칙 (v2)
-│       │   └── spec-compliance-checklist.md  # SCH-* 규칙 (v2)
+│       ├── SKILL.md                     # Main audit skill (8-step pipeline)
+│       ├── ruleset-version.txt          # Ruleset version lock
+│       ├── references/                  # Rule checklists
+│       │   ├── security-checklist.md    # SEC-*, SBX-* (17 rules)
+│       │   ├── destructive-ops-checklist.md  # DST-* (4 rules)
+│       │   ├── quality-checklist.md     # QUA-* (8 rules)
+│       │   ├── metadata-checklist.md    # META-* (3 rules)
+│       │   └── spec-compliance-checklist.md  # SCH-* (5 rules)
 │       ├── assets/
-│       │   ├── report-template.md      # Markdown 보고서 템플릿
-│       │   └── slack-message-template.json  # Slack Block Kit 템플릿
+│       │   ├── report-template.md       # Markdown report template
+│       │   └── slack-message-template.json
 │       └── config/
-│           └── approved-reviewers.yml  # audit-ignore 승인자 목록
+│           └── approved-reviewers.yml   # audit-ignore reviewer list
 ├── .github/workflows/
-│   └── skill-audit.yml               # GitHub Actions 워크플로우
-└── docs/
-    ├── introduction.md               # 소개 문서
-    ├── user-guide.md                 # 사용자 가이드
-    ├── phase1-spec.md                # Phase 1 스펙
-    └── general-spec.md               # 통합 스펙
+│   └── skill-audit.yml                 # GitHub Actions workflow
+├── docs/                               # Documentation
+└── tests/fixtures/                     # Test skills (7 fixtures)
 ```
 
-## 라이선스
+## Test Results
+
+Full end-to-end CI verification performed on 2026-04-02:
+
+| Test | Scenario | Expected | Result | Duration |
+|------|----------|----------|--------|----------|
+| Gate Only | PR with no skill/marketplace changes | Gate passes, Direct/Remote skip | **PASS** | 12s |
+| Direct Clean | Safe skill submitted to `skills/` | PASSED verdict, PR comment posted | **PASS** | 1m 52s |
+| Direct Dangerous | Malicious skill (SEC-010, SEC-003, DST-001, SBX-004) | BLOCKED verdict, check failure | **PASS** | 2m 6s |
+| Remote Plugin | marketplace.json revision change | External repo cloned, audited | **PASS** | 13m 48s |
+| URL Allowlist | `file:///etc/passwd` in marketplace.json | Blocked immediately | **PASS** | 5s |
+| Fail-Closed | Missing ANTHROPIC_API_KEY | BLOCKED (not PASSED) | **PASS** | 13s |
+
+**6/6 tests passed.**
+
+---
+
+## 한국어 요약
+
+Claude Code 마켓플레이스에 제출되는 서드파티 스킬을 **보안, 안전성, 품질** 기준으로 자동 검사하는 게이트키퍼 스킬입니다.
+
+- **35개 규칙** (OWASP AST10 기반) — CRITICAL 17개, HIGH 10개, MEDIUM 8개
+- **Adoption-First** — CRITICAL만 차단, 나머지는 경고
+- **로컬 검증** — PR 제출 전 CLI로 직접 감사 가능 ([가이드](docs/local-verification-guide.md))
+- **CI 자동화** — GitHub Actions로 PR 감사 자동화 ([가이드](docs/ci-integration-guide.md))
+- **Fail-Closed** — 감사 실패 시 차단 (PASSED가 아님)
+
+## License
 
 MIT
