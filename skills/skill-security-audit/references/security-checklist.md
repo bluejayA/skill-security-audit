@@ -1,6 +1,6 @@
 # Security Checklist
 
-> Phase 1 보안 규칙. 자격증명 노출, 원격 코드 실행, 셸 인젝션, 민감 경로 접근, 네트워크 접근을 검사한다.
+> Phase 1+2 보안 규칙. 자격증명 노출, 원격 코드 실행, 셸 인젝션, 민감 경로 접근, 네트워크 접근 + OWASP AST10 확장 규칙을 검사한다.
 > 이 파일은 SKILL.md에서 참조하는 규칙 정의 문서이며, 여기에 포함된 패턴 예시는 **설명 텍스트**이다.
 
 ---
@@ -146,6 +146,11 @@
   - `~/.gnupg`, `$HOME/.gnupg`
   - `~/.netrc`, `$HOME/.netrc`
   - `~/.config/gh`, `$HOME/.config/gh`
+  - `~/.kube/config`, `$HOME/.kube/config`
+  - `~/.docker/config.json`, `$HOME/.docker/config.json`
+  - `~/.npmrc`, `$HOME/.npmrc`
+  - `~/.pypirc`, `$HOME/.pypirc`
+  - `~/.config/gcloud`, `$HOME/.config/gcloud`
 - **파일 유형별 처리**: 모든 파일에서 패턴 매칭 즉시 판정 (고신뢰 패턴)
 - **수정 제안**: 사용자의 SSH 키, AWS 자격증명, GPG 키 등 민감 디렉토리에 접근하지 마세요.
 
@@ -214,3 +219,76 @@
   - 구조화 코드: 절대경로 + 쓰기 명령 조합 탐지
   - Markdown: LLM 문맥 분류 — 스킬 외부 경로에 쓰기 지시인지 판단
 - **수정 제안**: 스킬 디렉토리 외부에 파일을 쓰지 마세요. 출력은 stdout 또는 스킬 디렉토리 내부로 제한하세요.
+
+---
+
+### OWASP AST10 확장 (v2)
+
+> Phase 2에서 추가된 보안 규칙. OWASP Agentic Skills Top 10 기반.
+
+### SEC-040 — 안전하지 않은 YAML 로더 (Unsafe YAML Loader)
+- **심각도**: CRITICAL
+- **OWASP**: AST05 5.1
+- **범위**: scripts/ 내 모든 .py 파일, 모든 .yaml/.yml 파일
+- **탐지 패턴**:
+  - `yaml.load(` — `Loader=yaml.SafeLoader` 또는 `Loader=SafeLoader` 없이 사용
+  - `yaml.unsafe_load(`
+  - .yaml/.yml 파일 내 `!!python/object` 태그
+  - .yaml/.yml 파일 내 `!!python/apply` 태그
+- **파일 유형별 처리**: 패턴 매칭으로 즉시 판정
+- **메시지**: "Unsafe YAML deserialization at {file}:{line}. Use yaml.safe_load() instead (OWASP AST05 5.1)."
+- **수정 제안**: `yaml.load(data)` 를 `yaml.safe_load(data)` 로 교체하세요. `!!python/object`, `!!python/apply` 태그는 임의 코드 실행이 가능하므로 제거하세요.
+
+### SEC-041 — 스크립트 내 위험한 코드 실행 (Dangerous Code Execution in Scripts)
+- **심각도**: CRITICAL
+- **OWASP**: AST01 1.4
+- **범위**: scripts/ 내 모든 파일
+- **탐지 패턴**:
+  - Python: `eval(`, `exec(`, `compile(`, `os.system(`, `os.popen(`, `subprocess.call(.*shell=True`, `subprocess.Popen(.*shell=True`, `__import__(`, `importlib.import_module(`
+  - JavaScript: `eval(`, `new Function(`, `child_process.exec(`, `child_process.execSync(`
+  - Shell: `eval `, 알 수 없는 URL 소싱
+- **파일 유형별 처리**: 패턴 매칭으로 즉시 판정 (기존 SEC-001의 scripts/ 디렉토리 확장)
+- **우선순위**: `scripts/` 내 파일에서 SEC-041과 SEC-002가 동일 패턴(예: `eval(`)에 동시 매칭되면, **SEC-041이 우선 적용**되고 SEC-002는 중복 보고하지 않는다. SEC-041은 scripts/ 전용이므로 scripts/ 외부 파일에서는 SEC-002가 적용된다.
+- **메시지**: "Dangerous code execution pattern [{pattern}] at {file}:{line} (OWASP AST01 1.4)."
+- **수정 제안**: `eval()` 대신 명시적 파싱을 사용하세요. `subprocess.call(cmd, shell=True)` 대신 `subprocess.call(cmd_list)` 처럼 리스트를 전달하세요.
+
+### SBX-010 — 무제한 셸 접근 (Wildcard Shell Access)
+- **심각도**: HIGH
+- **OWASP**: AST03 3.3
+- **범위**: SKILL.md frontmatter `allowed-tools` 필드
+- **탐지 패턴**:
+  - `Bash(*:*)` 또는 `Bash(*)`
+  - `Shell(*:*)` 또는 `Shell(*)`
+  - 모든 도구 선언에서 무제한 `*` 와일드카드
+- **파일 유형별 처리**: frontmatter 파싱 후 패턴 매칭
+- **메시지**: "Unrestricted shell access declared in allowed-tools: [{value}]. Scope to specific commands (OWASP AST03 3.3)."
+- **수정 제안**: `Bash(*:*)` 대신 범위가 한정된 선언을 사용하세요. 예: `Bash(git:*)`, `Bash(npm:run)`.
+
+### SBX-011 — 바이너리 네트워크 권한 (Binary Network Permission)
+- **심각도**: HIGH
+- **OWASP**: AST03 3.7
+- **범위**: SKILL.md frontmatter, 매니페스트 파일, SKILL.md body
+- **탐지 패턴**:
+  - `network: true` — 도메인 allowlist 없이 사용
+  - SKILL.md body에서 "requires network access", "needs internet" — 특정 도메인 명시 없이
+- **파일 유형별 처리**:
+  - frontmatter: 키-값 파싱
+  - SKILL.md body: 자연어 지시 탐지
+- **메시지**: "Binary network permission without domain allowlist. Declare specific domains instead (OWASP AST03 3.7)."
+- **수정 제안**: `network: true` 대신 도메인 allowlist를 metadata 또는 compatibility 필드에 선언하세요. 예: `compatibility: Requires network access to api.example.com`.
+
+### SBX-012 — 광범위 파일 글로브 (Broad File Glob)
+- **심각도**: HIGH
+- **OWASP**: AST03 3.4
+- **범위**: SKILL.md frontmatter `allowed-tools`, scripts/, SKILL.md body
+- **탐지 패턴**:
+  - `**/*` — 재귀 와일드카드
+  - `~/*` 또는 `~/` — 홈 디렉토리
+  - 루트 경로: `/etc/`, `/usr/`, `/bin/`, `/var/`
+  - `Read(**/*:*)` 또는 `Write(**/*:*)` — allowed-tools 내
+- **파일 유형별 처리**:
+  - frontmatter: 패턴 매칭
+  - scripts/: 패턴 매칭
+  - SKILL.md body: 자연어 지시 탐지
+- **메시지**: "Broad file access pattern [{pattern}] at {location}. Scope to specific directories (OWASP AST03 3.4)."
+- **수정 제안**: `Read(**/*:*)` 대신 범위가 한정된 선언을 사용하세요. 예: `Read(src/**:*)`, `Read(references/*:*)`.
