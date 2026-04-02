@@ -1,6 +1,6 @@
 {
   "name": "skill-security-audit",
-  "version": "1.5.0",
-  "description": "Claude Code 스킬 보안 감사 플러그인 — 자격증명 보호, 시스템 안전, 최소 품질 기준 검사 (22개 규칙, Phase 1)",
+  "version": "2.0.0",
+  "description": "Claude Code 스킬 보안 감사 플러그인 — 자격증명 보호, 시스템 안전, 메타데이터 무결성, 최소 품질 기준 검사 (35개 규칙, OWASP AST10 기반, Phase 2)",
   "skills": "./skills"
 }
