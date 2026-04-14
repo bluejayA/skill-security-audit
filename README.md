@@ -56,6 +56,15 @@ Add automated auditing to your plugin repository or marketplace. See the guides 
 | [User Guide](docs/user-guide.md) | Installation, audit-ignore syntax, troubleshooting |
 | [Integration Guide](docs/integration-guide.md) | Integrate into existing marketplace repos (submodule setup) |
 
+### 유지보수 / 피드백 루프 (Maintainers)
+
+이 프로젝트는 operate-and-iterate 방식으로 진화합니다. 운영 중 관찰한 사례와 들어온 요구사항은 다음 두 파일에 누적합니다:
+
+| File | Purpose |
+|-------|---------|
+| [Operational Feedback Log](docs/operational-feedback.md) | FP/FN/Bypass/Friction/Near-miss 관찰 사례 누적. 종합 리뷰 진입 heuristic 정의 |
+| [Pending Requirements](devflow-docs/pending-requirements.md) | 들어온 요구사항 수집 → graduate / declined 상태 관리 |
+
 ## Rules (35 total)
 
 ### CRITICAL (17) — Blocks submission
