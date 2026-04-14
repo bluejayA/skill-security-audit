@@ -40,6 +40,15 @@ Add automated auditing to your plugin repository or marketplace. See the guides 
 
 ## Guides
 
+### 먼저 읽어보세요 (Introductions)
+
+| Intro | For |
+|-------|-----|
+| [개발자 가이드](docs/introduction-for-developers.md) | 스킬을 만들고 배포하는 개발자 — 리포 구조, 왜 필요한지, 어떻게 쓰는지 |
+| [보안 관점 개요](docs/introduction-for-security-engineers.md) | 보안 담당자 — 위협 모델, 통제 범위, 설계 선택과 한계 |
+
+### 운영 가이드 (Operational)
+
 | Guide | Description |
 |-------|-------------|
 | [Local Verification Guide](docs/local-verification-guide.md) | Run audits locally with Claude CLI before PR submission |
