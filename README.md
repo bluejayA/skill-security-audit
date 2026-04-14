@@ -116,18 +116,21 @@ skill-security-audit/
 
 ## Test Results
 
-Full end-to-end CI verification performed on 2026-04-02:
+Full end-to-end CI verification performed on 2026-04-02, diff-scoping verification added 2026-04-14:
 
 | Test | Scenario | Expected | Result | Duration |
 |------|----------|----------|--------|----------|
 | Gate Only | PR with no skill/marketplace changes | Gate passes, Direct/Remote skip | **PASS** | 12s |
 | Direct Clean | Safe skill submitted to `skills/` | PASSED verdict, PR comment posted | **PASS** | 1m 52s |
 | Direct Dangerous | Malicious skill (SEC-010, SEC-003, DST-001, SBX-004) | BLOCKED verdict, check failure | **PASS** | 2m 6s |
-| Remote Plugin | marketplace.json revision change | External repo cloned, audited | **PASS** | 13m 48s |
+| Remote Plugin (full) | marketplace.json revision change, all skills audited | External repo cloned, audited | **PASS** | 13m 48s |
+| Remote Plugin (diff-scoped skip) | revision change with no `skills/` diff | Audit skipped, PR note posted | **PASS** | 9s |
 | URL Allowlist | `file:///etc/passwd` in marketplace.json | Blocked immediately | **PASS** | 5s |
 | Fail-Closed | Missing ANTHROPIC_API_KEY | BLOCKED (not PASSED) | **PASS** | 13s |
 
-**6/6 tests passed.**
+**7/7 tests passed.**
+
+> Remote audits are **diff-scoped** — only skills whose files changed between the old and new revision are audited. Shared-path (`skills/_*/`) changes fall back to a full audit. See [CI Integration Guide](docs/ci-integration-guide.md#diff-scoping-remote-only) for details.
 
 ---
 

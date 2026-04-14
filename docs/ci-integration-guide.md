@@ -222,16 +222,33 @@ Each plugin entry must include a `revision` field (full commit SHA):
 ### Workflow overview
 
 The Remote workflow:
-1. Parses `marketplace.json` diff (base vs head, name-keyed map comparison)
+1. Parses `marketplace.json` diff (base vs head, name-keyed map comparison) — extracts both old and new `revision` per changed plugin
 2. Validates URLs against allowlist (`https://github.com/` only)
 3. Validates plugin names (alphanumeric, hyphens, underscores only)
-4. Clones each changed plugin repo (`--depth 1`, no submodules, timeout 120s)
-5. Checks out the specified `revision` SHA
-6. Finds `skills/*/SKILL.md` in the cloned repo
-7. Runs audit on each skill
-8. Posts results to PR
+4. Validates `revision` / `old_revision` against SHA format (`^[a-f0-9]{7,40}$`)
+5. Clones each changed plugin repo (`--depth 1`, no submodules, timeout 120s)
+6. Checks out the specified `revision` SHA
+7. **Diff-scoping:** if `old_revision` exists, `git fetch` it and compute `git diff old..new -- skills/` — only audit skills whose files changed. See [Diff-scoping](#diff-scoping-remote-only) below.
+8. Runs audit on each selected skill with a 300s per-skill timeout
+9. Posts results to PR
 
 For the full workflow file, see [`devflow-marketplace/.github/workflows/skill-audit-remote.yml`](https://github.com/bluejayA/devflow-marketplace/blob/main/.github/workflows/skill-audit-remote.yml).
+
+### Diff-scoping (Remote only)
+
+For plugins with many skills (e.g., 20+), auditing every skill on every revision bump causes long workflow runs and unnecessary API spend. The Remote workflow scopes audits to only the skills that actually changed:
+
+| Scenario | Action |
+|---|---|
+| Existing plugin, some skills changed | Audit only changed skill directories |
+| `skills/_*/` shared path changed | Fall back to **full audit** (shared code may affect other skills) |
+| New plugin (no `old_revision`) | Full audit |
+| `old_revision` fetch failed | Full audit + warning log |
+| `skills/` tree unchanged between revisions | Skip audit, post ℹ️ note to PR |
+
+The selection is controlled by a `SCOPE_KIND` enum (`diff` / `full_shared` / `full_fetch_failed` / `full_new_plugin`). See workflow comments for details.
+
+**Known limitation:** ruleset version upgrades do not trigger automatic re-audit of previously-passing plugins whose `skills/` tree has not changed. Maintainers should force a full re-audit on major ruleset bumps (e.g., via `workflow_dispatch`).
 
 ### Security measures
 
@@ -241,7 +258,9 @@ For the full workflow file, see [`devflow-marketplace/.github/workflows/skill-au
 | **Base branch audit tool** | Prevent submodule pointer tampering in PRs |
 | **URL allowlist** | Block `file://`, `ssh://`, localhost, IP-based URLs |
 | **Revision pinning** | Ensure reproducible audits (checkout fails → BLOCKED) |
-| **Fail-Closed** | Claude CLI failure → BLOCKED (never silent PASSED) |
+| **Revision SHA validation** | `revision` / `old_revision` must match `^[a-f0-9]{7,40}$` before reaching `git fetch` / `git diff` |
+| **Per-skill timeout** | 300s cap on `claude --print`; a single hung audit does not stall the job (timeout → BLOCKED for that skill, others continue) |
+| **Fail-Closed** | clone / fetch / CLI failure or timeout → BLOCKED (never silent PASSED). Diff-scoping falls back to full audit on fetch failure. |
 | **Input validation** | Regex validation on plugin names and skill paths |
 | **Concurrency** | `cancel-in-progress` prevents duplicate runs per PR |
 
@@ -276,6 +295,7 @@ GitHub Actions로 PR 제출 시 자동 보안 감사를 설정하는 가이드�
 
 - **Direct 모드**: `skills/` 디렉토리에 직접 스킬을 올리는 경우
 - **Remote 모드**: `marketplace.json`에 외부 플러그인 URL을 등록하는 경우
+- **Diff-scoping (Remote)**: 변경된 스킬만 감사하여 대규모 플러그인 업데이트 시 시간/비용 절감. `skills/_*/` 공유 경로 변경 시 전수 감사로 fallback.
 - **필수 Secret**: `ANTHROPIC_API_KEY` (Repository secret으로 등록)
-- **보안 설계**: 2-job 분리, base branch audit tool, URL allowlist, revision 고정, Fail-Closed
+- **보안 설계**: 2-job 분리, base branch audit tool, URL/이름/SHA allowlist, revision 고정, 스킬당 300s 타임아웃, Fail-Closed
 - **비용**: Sonnet 기준 스킬 1개 감사에 ~$0.14
